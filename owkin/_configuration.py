@@ -8,7 +8,7 @@ import sys
 from colorama import Fore, Style
 
 
-def configure_logger(debug=True):
+def configure_logger(debug=False):
     """
 
     Args:
