@@ -1,0 +1,10 @@
+# Created by .ignore support plugin (hsz.mobi)
+
+*.pyc
+*.pyo
+.idea
+.ipynb_checkpoints
+
+data/*
+resources/
+
