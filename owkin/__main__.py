@@ -36,7 +36,6 @@ def train(args):
     x_train, y_train = utils.load_annotated_training_features(args.data_dir)
     x_train_na, train_output_na = utils.load_training_features(args.data_dir,
                                                                with_annotated=False)
-    x_test, test_output = utils.load_test_features(args.data_dir)
 
     # Preproc the data
     # scaler = StandardScaler()
@@ -102,8 +101,10 @@ def train(args):
         y_pred_proba.append(y_tiles_pred_proba.mean())
         y_pred.append(y_tiles_pred.mean())
         logging.debug(
-            f"{train_output_na['ID'].iloc[i]} score = {y_pred[i]}, score = {
-            y_pred_proba[i]}, true = {y_true[i]}")
+            f"{train_output_na['ID'].iloc[i]} "
+            f"score = {y_pred[i]}, "
+            f"score = {y_pred_proba[i]}, "
+            f"true = {y_true[i]}")
 
     final_auc_proba = roc_auc_score(y_true, y_pred_proba)
     final_auc = roc_auc_score(y_true, y_pred)
@@ -111,6 +112,8 @@ def train(args):
     logging.info(f"final auc: {final_auc}")
 
     # Test
+    x_test, test_output = utils.load_test_features(args.data_dir)
+
     y_test_pred = []
     y_test_pred_proba = []
     for i, x in enumerate(x_test):
@@ -119,8 +122,9 @@ def train(args):
         y_test_pred_proba.append(y_tiles_pred_proba.mean())
         y_test_pred.append(y_tiles_pred.mean())
         logging.debug(
-            f"{test_output.index[i]} score = {y_test_pred[i]}, score = {
-            y_test_pred_proba[i]}")
+            f"{test_output.index[i]} "
+            f"score = {y_test_pred[i]}, "
+            f"score = {y_test_pred_proba[i]}")
 
     test_output["Target"] = y_test_pred_proba
     test_output.to_csv(args.data_dir / f"preds_test_{args.model}_proba.csv")
@@ -214,8 +218,6 @@ if __name__ == '__main__':
     if args is None or hasattr(args, 'func') is False:
         parser.print_help()
         exit(-1)
-
-    utils.configure_logger(args)
 
     try:
         args.func(args)
