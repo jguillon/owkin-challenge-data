@@ -18,7 +18,6 @@ from sklearn.svm import SVC
 
 import owkin.utils as utils
 
-
 def train(args):
     logging.info('training:')
     for k, v in vars(args).items():
@@ -218,6 +217,10 @@ if __name__ == '__main__':
     if args is None or hasattr(args, 'func') is False:
         parser.print_help()
         exit(-1)
+
+    if args.verbose:
+        logger = logging.getLogger()
+        logger.setLevel(logging.DEBUG)
 
     try:
         args.func(args)

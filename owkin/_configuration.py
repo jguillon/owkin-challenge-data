@@ -8,7 +8,7 @@ import sys
 from colorama import Fore, Style
 
 
-def configure_logger(verbose=True):
+def configure_logger(debug=True):
     """
 
     Args:
@@ -22,7 +22,7 @@ def configure_logger(verbose=True):
     for hdlr in logger.handlers:
         logger.removeHandler(hdlr)
 
-    if verbose:
+    if debug:
         logger.setLevel(logging.DEBUG)
     else:
         logger.setLevel(logging.INFO)
