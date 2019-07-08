@@ -173,7 +173,7 @@ def _load_image_generator(batch_size, target_size, image_dir, preprocessing_func
             shuffle=False,
             class_mode=None
     )
-
+    
     return image_iterator, filenames_df
 
 
@@ -196,14 +196,13 @@ def load_training_images(batch_size, target_size, data_dir=Path('data/'),
     train_output_filename = data_dir / "training_output.csv"
 
     # Load training output
-    logging.debug(f'reading csv file: {train_output_filename}')
+    logging.info(f'reading csv file: {train_output_filename}')
     train_output = pd.read_csv(train_output_filename)
     train_output = train_output.set_index('ID')
     
-    # Remove annotated subjects
-    if not with_annotated:
-        ids = train_filenames_df["ID"].str[:3].unique()
-        train_output = train_output[train_output['ID'].isin(ids)]
+    # Filter dataframe with loaded subjects
+    ids = pd.to_numeric(train_filenames_df['ID'].str[:3].unique())
+    train_output = train_output[train_output.index.isin(ids)]
     
     return train_image_iterator, train_filenames_df, train_output
     
@@ -235,3 +234,34 @@ def submit_test_output(test_output, file_id, output_dir=Path('outputs/')):
     filename = output_dir / f"preds_test_{file_id}.csv"
     logging.debug(f'writing to {filename}')
     test_output.to_csv(filename)
+
+
+def save_model(model, filename, output_dir):
+    """Save a sklearn estimator or a keras model.
+
+    Args:
+        model: sklearn estimator or keras model.
+        filename: stem of the output file (i.e. without extension).
+
+    Returns: None.
+
+    """
+    from sklearn.externals import joblib
+    joblib.dump(model, f'{filename}.pkl')
+
+def load_model(filename):
+    """Load a previously save model.
+
+    Notes: The file has to have been saved using the `save_model` function.
+
+    Args:
+        filename: stem of the file to load.
+
+    Returns: The loaded model.
+
+    """
+    from sklearn.externals import joblib
+    # Load the pickle file
+    model = joblib.load(f'{filename}.pkl')
+
+    return model

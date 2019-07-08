@@ -29,5 +29,5 @@ From the repository directory, you can launch the command line
 tool by typing the following command:
 
 ```bash
-python owkin --help
+python -m owkin
 ```
