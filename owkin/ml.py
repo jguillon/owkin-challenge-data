@@ -5,7 +5,50 @@
 import logging
 
 
-def train_tiles_classifier(data_dir, cross_val=True, num_runs=10, num_splits=10,
+def project_as_histogram(x, bins=20):
+    """Project a probabilities vector to an histogram representation.
+
+    Args:
+        x: a vector of probabilities of length `n_tiles`
+        bins (int): size of the histogram output vector
+
+    Returns: the histogram vector of length `bins`, containing the proportion
+    of
+        values
+
+    """
+    import numpy as np
+
+    counts, _ = np.histogram(x, bins=bins, range=(0, 1))
+    return counts / sum(counts)
+
+
+def build_model(hidden_layer_size=32, output_layer_size=2, pooling='avg'):
+    """
+
+    Returns:
+
+    """
+    from ._configuration import HEIGHT, WIDTH, CHANNELS
+    from keras.applications import ResNet50
+    from keras.models import Sequential
+    from keras.layers import Dense
+
+    model = Sequential([
+        ResNet50(weights='imagenet', include_top=False,
+                 input_shape=(HEIGHT, WIDTH, CHANNELS), pooling=pooling),
+        Dense(hidden_layer_size, activation='relu'),
+        Dense(output_layer_size, activation='softmax')
+    ])
+
+    # we do not train the ResNet50 layer since it is already pre-trained on
+    # the ImageNet dataset
+    model.layers[0].trainable = False
+
+    return model
+
+
+def train_tiles_classifier(data_dir, cross_val=True, save=True, num_runs=10, num_splits=10,
                            verbose=3, model='random_forest',
                            filename='tiles_classifier'):
     """Cross-validation and training of the tiles classifier.
@@ -43,40 +86,28 @@ def train_tiles_classifier(data_dir, cross_val=True, num_runs=10, num_splits=10,
         logging.info("")
         logging.info("cross-validation:")
         aucs = []
-        estimator = None
         for seed in range(num_runs):
             logging.info(f"  run {seed + 1}/{num_runs}:")
 
-            # Use logistic regression with L2 penalty
+            # Model initialisation
             estimators = {
-                'random_forest': RandomForestClassifier(
-                        n_estimators=20),
+                'random_forest': RandomForestClassifier(n_estimators=20),
                 'svm'          : SVC(),
             }
             estimator = estimators[model]
-            cv = StratifiedKFold(n_splits=num_splits,
-                                 shuffle=True,
+            cv = StratifiedKFold(n_splits=num_splits, shuffle=True,
                                  random_state=seed)
 
             # Cross validation on the training set
-            auc = cross_val_score(estimator,
-                                  X=x_train,
-                                  y=y_train,
-                                  n_jobs=-1,
-                                  # method='predict_proba',
-                                  cv=cv,
-                                  scoring="roc_auc",
-                                  verbose=verbose)
-
-            # auc = roc_auc_score(y_train, y_train_pred[:, 1])
+            auc = cross_val_score(estimator, X=x_train, y=y_train, n_jobs=-1,
+                                  cv=cv, scoring="roc_auc", verbose=verbose)
             logging.debug(f"    auc={auc}")
-
             aucs.append(auc)
 
         aucs = np.array(aucs)
         logging.info("  auc: mean {}, std {}".format(aucs.mean(), aucs.std()))
     else:
-        # Training
+        # Single training on the whole dataset
         logging.info("training the tiles classifier on the entire annotated "
                      "dataset")
         estimators = {
@@ -86,7 +117,9 @@ def train_tiles_classifier(data_dir, cross_val=True, num_runs=10, num_splits=10,
         estimator = estimators[model]
         estimator.fit(x_train, y_train)
 
-        save_model(estimator, filename=model)
+        if save:
+            # Model saving
+            save_model(estimator, filename=model)
 
 
 def train_subjects_classifier(data_dir, cv=True, num_runs=10, num_splits=10,

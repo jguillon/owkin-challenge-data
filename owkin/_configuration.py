@@ -7,6 +7,9 @@ import sys
 
 from colorama import Fore, Style
 
+HEIGHT = 224
+WIDTH = 224
+CHANNELS = 3
 
 def configure_logger(debug=False):
     """

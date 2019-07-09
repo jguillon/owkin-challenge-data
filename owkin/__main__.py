@@ -13,67 +13,91 @@ from pathlib import Path
 
 import argcomplete
 
-from .cli import log_args
+from owkin.cli import log_args
 
 
 def train(args):
-    from .ml import train_tiles_classifier, train_subjects_classifier
-    from sklearn.ensemble import RandomForestClassifier
+    from owkin.ml import train_tiles_classifier, train_subjects_classifier
 
     logging.info('training:')
     log_args(args)
 
-    train_tiles_classifier()
-
-    train_subjects_classifier()
+    if args.tiles_only:
+        train_tiles_classifier(data_dir=args.data_dir,
+                               model=args.tiles_classifier)
+    elif args.subjects_only:
+        train_subjects_classifier(data_dir=args.data_dir)
+    else:
+        train_tiles_classifier(data_dir=args.data_dir)
+        train_subjects_classifier(data_dir=args.data_dir)
 
 
 def test(args):
-    from .io import load_test_features, load_model
     logging.info('testing:')
+    log_args(args)
 
-    logging.info('loading model')
-    model = load_model(filename=args.model)
-
-    x_test, test_output = load_test_features(args.data_dir)
-
-    y_test_pred = []
-    y_test_pred_proba = []
-    for i, x in enumerate(x_test):
-        y_tiles_pred_proba = model.predict_proba(x)[:, 1]
-        y_tiles_pred = model.predict(x)
-        y_test_pred_proba.append(y_tiles_pred_proba.max())
-        y_test_pred.append(y_tiles_pred.max())
-        logging.debug(
-                f"{test_output.index[i]} "
-                f"score = {y_test_pred[i]}, "
-                f"score = {y_test_pred_proba[i]}")
-
-    test_output["Target"] = y_test_pred_proba
-    test_output.to_csv(args.data_dir / f"preds_test_{args.model}_proba.csv")
-    test_output["Target"] = y_test_pred
-    test_output.to_csv(args.data_dir / f"preds_test_{args.model}.csv")
-
-    # # Test
+    # from .io import load_test_features, load_model
+    # logging.info('testing:')
+    #
+    # logging.info('loading model')
+    # model = load_model(filename=args.model)
+    #
+    # x_test, test_output = load_test_features(args.data_dir)
+    #
     # y_test_pred = []
     # y_test_pred_proba = []
     # for i, x in enumerate(x_test):
-    #     y_tiles_pred_proba = estimator.predict_proba(x)[:, 1]
-    #     y_tiles_pred = estimator.predict(x)
-    #     y_test_pred_proba.append(y_tiles_pred_proba.mean())
-    #     y_test_pred.append(y_tiles_pred.mean())
+    #     y_tiles_pred_proba = model.predict_proba(x)[:, 1]
+    #     y_tiles_pred = model.predict(x)
+    #     y_test_pred_proba.append(y_tiles_pred_proba.max())
+    #     y_test_pred.append(y_tiles_pred.max())
     #     logging.debug(
-    #         f"{test_output.index[i]} score = {y_test_pred[i]}, score = {
-    #         y_test_pred_proba[i]}")
-
-
-def submit(args):
-    logging.info('submitting:')
-
+    #             f"{test_output.index[i]} "
+    #             f"score = {y_test_pred[i]}, "
+    #             f"score = {y_test_pred_proba[i]}")
+    #
     # test_output["Target"] = y_test_pred_proba
     # test_output.to_csv(args.data_dir / f"preds_test_{args.model}_proba.csv")
     # test_output["Target"] = y_test_pred
     # test_output.to_csv(args.data_dir / f"preds_test_{args.model}.csv")
+
+    from owkin.ml import build_model, project_as_histogram
+    from owkin.io import load_test_images
+    from owkin._configuration import HEIGHT, WIDTH
+    from keras.applications.resnet50 import preprocess_input
+    import numpy as np
+
+    # Model loading
+    model = build_model()
+    model.load_weights('models/best_transfer_learning.hd5')
+
+    # Data loading
+    test_data_generator, test_filenames_df = load_test_images(
+            data_dir=Path('data'),
+            target_size=(HEIGHT, WIDTH),
+            batch_size=8,
+            preprocessing_function=preprocess_input
+    )
+
+    # Tiles tumoral prediction
+    logging.info("predicting the tiles status of the test subjects...")
+    y_test_pred = model.predict_generator(test_data_generator,
+                                          steps=len(test_data_generator),
+                                          verbose=1)
+
+    # Save tiles predictions
+    output_file = Path('data/test_output/tiles_predictions.npy')
+    logging.info(f"saving predictions in '{output_file}'")
+    np.save(output_file, y_test_pred)
+
+    assert len(y_test_pred) == len(test_filenames_df), "the are not corresponding to the list of tiles"
+
+    test_output = test_filenames_df.copy()
+    test_output['Target'] = np.zeros(len(test_output))
+    test_output['Target'].iloc[:len(y_test_pred)] = y_test_pred[:, 1]
+
+    x_test_2 = test_output.groupby('ID').apply(
+            lambda x: project_as_histogram(x['Target']))
 
 
 if __name__ == '__main__':
@@ -99,22 +123,38 @@ if __name__ == '__main__':
                                             help='cross-validate and train')
     train_subparser.add_argument("--data_dir", type=Path,
                                  default='data/',
-                                 help="directory where data is stored")
+                                 help="directory where data is stored ("
+                                      "default: data/)")
     train_subparser.add_argument("--num_runs", default=3, type=int,
-                                 help="number of runs for the cross validation")
+                                 help="number of runs for the cross "
+                                      "validation (default: 3)")
     train_subparser.add_argument("--num_splits", default=5, type=int,
                                  help="number of splits for the cross "
-                                      "validation")
-    train_subparser.add_argument("--model", default='random_forest_classifier',
+                                      "validation (default: 5)")
+    train_subparser.add_argument("--tiles_classifier",
+                                 default='resnet50',
                                  type=str,
-                                 choices=['random_forest_classifier', 'svm'],
-                                 help="number of splits for the cross "
-                                      "validation")
+                                 choices=['resnet50', 'random_forest', 'svm'],
+                                 help="model for the tiles classification ("
+                                      "default: resnet50)")
+    train_subparser.add_argument("--subjects_classifier",
+                                 default='random_forest_classifier',
+                                 type=str,
+                                 choices=['random_forest', 'max_proba',
+                                          'mean_proba'],
+                                 help="model for the subjects classification "
+                                      "(default: random_forest)")
+    train_subparser.add_argument("--tiles_only", action="store_true",
+                                 help="train only the tiles classifier")
+    train_subparser.add_argument("--subjects_only", action="store_true",
+                                 help="train only the subjects classifier")
+    train_subparser.add_argument("--cv", action="store_true",
+                                 help="cross-validate")
 
     test_subparser = subparsers.add_parser('test',
                                            add_help=False,
                                            parents=[parser],
-                                           help='test a previously train '
+                                           help='test a previously trained '
                                                 'estimator on the public test'
                                                 ' set')
 
@@ -144,9 +184,8 @@ if __name__ == '__main__':
         parser.print_help()
         exit(-1)
 
-    if args.verbose:
-        logger = logging.getLogger()
-        logger.setLevel(logging.DEBUG)
+    from owkin._configuration import configure_logger
+    configure_logger(debug=args.verbose)
 
     try:
         args.func(args)
